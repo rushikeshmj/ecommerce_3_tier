@@ -8,7 +8,7 @@ resource "aws_db_instance" "rds" {
   engine                  = var.engine
   instance_class          = var.instance_class
   allocated_storage       = var.allocated_storage
-  name                    = var.db_name
+  db_name                 = var.db_name
   username                = var.username
   password                = var.password
   skip_final_snapshot     = true
