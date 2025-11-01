@@ -1,0 +1,90 @@
+repositories:
+  - name: local
+    url: "file://./charts"
+
+environments:
+  dev:
+    values:
+      - values-dev.yaml
+  prod:
+    values:
+      - values-production.yaml
+
+releases:
+- name: auth-service
+  namespace: ecommerce
+  chart: ./charts/auth-service
+  values:
+    - ./charts/auth-service/values.yaml
+    - ./charts/auth-service/values-production.yaml
+
+- name: product-service
+  namespace: ecommerce
+  chart: ./charts/product-service
+  values:
+    - ./charts/product-service/values.yaml
+    - ./charts/product-service/values-production.yaml
+
+- name: cart-service
+  namespace: ecommerce
+  chart: ./charts/cart-service
+  values:
+    - ./charts/cart-service/values.yaml
+    - ./charts/cart-service/values-production.yaml
+
+- name: order-service
+  namespace: ecommerce
+  chart: ./charts/order-service
+  values:
+    - ./charts/order-service/values.yaml
+    - ./charts/order-service/values-production.yaml
+
+- name: payment-service
+  namespace: ecommerce
+  chart: ./charts/payment-service
+  values:
+    - ./charts/payment-service/values.yaml
+    - ./charts/payment-service/values-production.yaml
+
+- name: inventory-service
+  namespace: ecommerce
+  chart: ./charts/inventory-service
+  values:
+    - ./charts/inventory-service/values.yaml
+    - ./charts/inventory-service/values-production.yaml
+
+- name: review-service
+  namespace: ecommerce
+  chart: ./charts/review-service
+  values:
+    - ./charts/review-service/values.yaml
+    - ./charts/review-service/values-production.yaml
+
+- name: shipping-service
+  namespace: ecommerce
+  chart: ./charts/shipping-service
+  values:
+    - ./charts/shipping-service/values.yaml
+    - ./charts/shipping-service/values-production.yaml
+
+- name: notification-service
+  namespace: ecommerce
+  chart: ./charts/notification-service
+  values:
+    - ./charts/notification-service/values.yaml
+    - ./charts/notification-service/values-production.yaml
+
+- name: analytics-service
+  namespace: ecommerce
+  chart: ./charts/analytics-service
+  values:
+    - ./charts/analytics-service/values.yaml
+    - ./charts/analytics-service/values-production.yaml
+
+- name: api-gateway
+  namespace: ecommerce
+  chart: ./charts/api-gateway
+  values:
+    - ./charts/api-gateway/values.yaml
+    - ./charts/api-gateway/values-production.yaml
+

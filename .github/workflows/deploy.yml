@@ -1,0 +1,94 @@
+name: CI/CD - Terraform + Build + Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ap-south-1
+  PROJECT_NAME: ecommerce
+  ENVIRONMENT: dev
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy infra, build images, and deploy charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.7.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ${{{{ env.AWS_REGION }}}}
+          role-to-assume: ${{{{ secrets.AWS_ROLE_TO_ASSUME }}}}
+          role-session-name: github-actions
+
+      - name: Terraform Init
+        working-directory: terraform/environments/${{{{ env.ENVIRONMENT }}}}
+        run: terraform init -backend-config=backend.tfvars
+
+      - name: Terraform Plan
+        working-directory: terraform/environments/${{{{ env.ENVIRONMENT }}}}
+        run: terraform plan -var-file=terraform.tfvars -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: terraform/environments/${{{{ env.ENVIRONMENT }}}}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Configure AWS ECR login
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Get ECR registry
+        id: ecr
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "registry=${{ACCOUNT_ID}}.dkr.ecr.${{{{ env.AWS_REGION }}}}.amazonaws.com" >> $GITHUB_OUTPUT
+
+      - name: Build and push images
+        run: |
+          echo "Building and pushing images to ECR..."
+          REG=${{{{ steps.ecr.outputs.registry }}}}
+          SERVICES=auth-service product-service cart-service order-service payment-service inventory-service review-service shipping-service notification-service analytics-service api-gateway
+          for svc in $SERVICES; do
+            echo "Building $svc..."
+            # Assumes Dockerfile present per-service at services/<svc>/Dockerfile
+            if [ -f services/$svc/Dockerfile ]; then
+              docker build -t $REG/$svc:latest -f services/$svc/Dockerfile services/$svc
+              docker push $REG/$svc:latest
+            else
+              echo "Skipping $svc - Dockerfile not found at services/$svc/Dockerfile"
+            fi
+          done
+
+      - name: Configure kubeconfig
+        run: |
+          CLUSTER_NAME="${{{{ env.PROJECT_NAME }}}}-${{{{ env.ENVIRONMENT }}}}"
+          aws eks update-kubeconfig --region ${{{{ env.AWS_REGION }}}} --name $CLUSTER_NAME
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+
+      - name: Deploy Helm charts
+        run: |
+          helm upgrade --install auth-service charts/auth-service --set image.repository=$REG/auth-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install product-service charts/product-service --set image.repository=$REG/product-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install cart-service charts/cart-service --set image.repository=$REG/cart-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install order-service charts/order-service --set image.repository=$REG/order-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install payment-service charts/payment-service --set image.repository=$REG/payment-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install inventory-service charts/inventory-service --set image.repository=$REG/inventory-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install review-service charts/review-service --set image.repository=$REG/review-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install shipping-service charts/shipping-service --set image.repository=$REG/shipping-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install notification-service charts/notification-service --set image.repository=$REG/notification-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install analytics-service charts/analytics-service --set image.repository=$REG/analytics-service --set image.tag=latest --namespace default --create-namespace
+          helm upgrade --install api-gateway charts/api-gateway --set image.repository=$REG/api-gateway --set image.tag=latest --namespace default --create-namespace
