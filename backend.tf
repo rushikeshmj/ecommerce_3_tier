@@ -1,6 +1,6 @@
 terraform {
   backend "s3" {
-    bucket         = "skalankar-terraform-state"
+    bucket         = "terraform-state-bucket-ecom"
     key            = "eks/${var.environment}/terraform.tfstate"
     region         = "ap-south-1"
     dynamodb_table = "terraform-locks"
