@@ -9,7 +9,6 @@ on:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}
   K8S_NAMESPACE: ${{ secrets.K8S_NAMESPACE }}
   TF_BACKEND_BUCKET: ${{ secrets.TF_BACKEND_BUCKET }}
@@ -18,8 +17,8 @@ env:
 
 jobs:
   deploy:
-    name: Deploy Infrastructure and Microservices
     runs-on: ubuntu-latest
+    name: Deploy Infrastructure + Services
 
     steps:
       - name: 🧾 Checkout code
@@ -32,9 +31,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # -----------------------------
-      # Terraform Infrastructure Setup
-      # -----------------------------
       - name: 🏗️ Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -56,15 +52,16 @@ jobs:
         working-directory: ./terraform/environments/dev
         run: terraform apply -auto-approve -var-file="terraform.tfvars"
 
-      # -----------------------------
-      # Build & Push Docker Images
-      # -----------------------------
       - name: 🐳 Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: 🔨 Build & Push Docker images for all microservices
         run: |
+          ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
+          REGION=${{ secrets.AWS_REGION }}
+          ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+
           SERVICES=(
             auth-service
             product-service
@@ -80,16 +77,13 @@ jobs:
           )
 
           for SERVICE in "${SERVICES[@]}"; do
-            echo "Building and pushing $SERVICE..."
-            IMAGE_URI="${ECR_REPOSITORY}/${SERVICE}:${GITHUB_SHA}"
+            echo "🚧 Building image for $SERVICE"
+            IMAGE_URI="${ECR_URI}/${SERVICE}:${GITHUB_SHA}"
             docker build -t $IMAGE_URI ./services/$SERVICE
             docker push $IMAGE_URI
           done
 
-      # -----------------------------
-      # Helmfile Deployment to EKS
-      # -----------------------------
-      - name: ☸️ Setup kubectl & helm
+      - name: ☸️ Setup kubectl, helm & helmfile
         run: |
           curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
           chmod +x kubectl && sudo mv kubectl /usr/local/bin/
@@ -97,13 +91,13 @@ jobs:
           curl -L https://github.com/roboll/helmfile/releases/download/v0.158.1/helmfile_0.158.1_linux_amd64.tar.gz | tar xz
           sudo mv helmfile /usr/local/bin/
 
-      - name: 🔑 Configure kubeconfig for EKS
+      - name: 🔑 Configure kubeconfig
         run: |
           aws eks update-kubeconfig \
             --region $AWS_REGION \
             --name $CLUSTER_NAME
 
-      - name: 🧭 Deploy all services via Helmfile
+      - name: 🧭 Deploy all Helm charts with helmfile
         run: |
           helmfile -e dev apply
 
